@@ -45,6 +45,7 @@ __repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_TLC59711.git"
 # pylint: disable=too-many-lines
 
 
+from operator import inv
 import struct
 
 from micropython import const
@@ -307,6 +308,9 @@ class TLC59711:
         self._buffer_index_lookuptable = []
         self._init_lookuptable()
 
+        # Modified for inverted output
+        self._inv = False
+
     def _init_buffer(self):
         for chip_index in range(self.chip_count):
             # set Write Command (6Bit) WRCMD (fixed: 25h)
@@ -441,14 +445,24 @@ class TLC59711:
 
     def _init_lookuptable(self):
         for channel_index in range(self.channel_count):
+            # Modified for the natural order of channel_index
             buffer_index = (_CHIP_BUFFER_BYTE_COUNT // _BUFFER_BYTES_PER_COLOR) * (
                 channel_index // CHANNEL_PER_CHIP
-            ) + channel_index % CHANNEL_PER_CHIP
+            ) + (CHANNEL_PER_CHIP - 1) - (channel_index % CHANNEL_PER_CHIP)
             buffer_index *= _BUFFER_BYTES_PER_COLOR
             buffer_index += _CHIP_BUFFER_HEADER_BYTE_COUNT
             self._buffer_index_lookuptable.append(buffer_index)
 
     ##########################################
+
+    # Modified for inverted output
+    def invert_output(self, inv):
+        """
+        Invert output pulse.
+
+        :param bool inv: Apply inversion (or not).
+        """
+        self._inv = (inv == True)
 
     def _write(self):
         # Write out the current state to the shift register.
@@ -640,6 +654,11 @@ class TLC59711:
         :param int value_g: 0..65535
         :param int value_b: 0..65535
         """
+        if self._inv:
+            value_r = 65535 - value_r
+            value_g = 65535 - value_g
+            value_b = 65535 - value_b
+
         # optimized for speed.
         # the struct version leads to very slow runtime behaivor if you set
         # lots of pixels. that is the reason the discreet version is used.
@@ -647,7 +666,7 @@ class TLC59711:
         # most prominent this is visible at the set_pixel_all_16bit_value func:
         #  struct 157ms to 16ms (@144pixel on ItsyBitsy M4)
         pixel_start = pixel_index * COLORS_PER_PIXEL
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
+        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
         # struct.pack_into('>H', self._buffer, buffer_start, value_b)
         self._buffer[buffer_start + 0] = (value_b >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_b & 0xFF
@@ -655,7 +674,7 @@ class TLC59711:
         # struct.pack_into('>H', self._buffer, buffer_start, value_g)
         self._buffer[buffer_start + 0] = (value_g >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_g & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
+        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
         # struct.pack_into('>H', self._buffer, buffer_start, value_r)
         self._buffer[buffer_start + 0] = (value_r >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_r & 0xFF
@@ -683,16 +702,7 @@ class TLC59711:
         value_r = int(value_r * 65535)
         value_g = int(value_g * 65535)
         value_b = int(value_b * 65535)
-        pixel_start = pixel_index * COLORS_PER_PIXEL
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
-        self._buffer[buffer_start + 0] = (value_b >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = value_b & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 1]
-        self._buffer[buffer_start + 0] = (value_g >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = value_g & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
-        self._buffer[buffer_start + 0] = (value_r >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = value_r & 0xFF
+        self.set_pixel_16bit_value(pixel_index, value_r, value_g, value_b)
 
     def set_pixel_16bit_color(self, pixel_index, color):
         """
@@ -714,16 +724,7 @@ class TLC59711:
         # speed optimization: 140ms to 24ms (@144pixel on ItsyBitsy M4)
         # the `color = list(color)` is the key here! (don't ask me why..)
         color = list(color)
-        pixel_start = pixel_index * COLORS_PER_PIXEL
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
-        self._buffer[buffer_start + 0] = (color[2] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[2] & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 1]
-        self._buffer[buffer_start + 0] = (color[1] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[1] & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
-        self._buffer[buffer_start + 0] = (color[0] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[0] & 0xFF
+        self.set_pixel_16bit_value(pixel_index, color[0], color[1], color[2])
 
     def set_pixel_float_color(self, pixel_index, color):
         """
@@ -747,16 +748,7 @@ class TLC59711:
         color[0] = int(color[0] * 65535)
         color[1] = int(color[1] * 65535)
         color[2] = int(color[2] * 65535)
-        pixel_start = pixel_index * COLORS_PER_PIXEL
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
-        self._buffer[buffer_start + 0] = (color[2] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[2] & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 1]
-        self._buffer[buffer_start + 0] = (color[1] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[1] & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
-        self._buffer[buffer_start + 0] = (color[0] >> 8) & 0xFF
-        self._buffer[buffer_start + 1] = color[0] & 0xFF
+        self.set_pixel_16bit_value(pixel_index, color[0], color[1], color[2])
 
     def set_pixel(self, pixel_index, value):
         """
@@ -849,15 +841,19 @@ class TLC59711:
             # check if values are in range
             if not 0 <= value <= 65535:
                 raise ValueError("value {} not in range: 0..65535")
+            if self._inv:
+                value = 65535 - value
             # temp = channel_index
             # we change channel order here:
             # buffer channel order is blue, green, red
             pixel_index_offset = channel_index % COLORS_PER_PIXEL
-            if pixel_index_offset == 0:
-                channel_index += 2
-            elif pixel_index_offset == 2:
-                channel_index -= 2
+            # Modified for the natural order of channel_index
+            # if pixel_index_offset == 0:
+            #    channel_index += 2
+            # elif pixel_index_offset == 2:
+            #    channel_index -= 2
             # set value in buffer
+            print('value= ', value)
             buffer_start = self._buffer_index_lookuptable[channel_index]
             struct.pack_into(">H", self._buffer, buffer_start, value)
         else:
