@@ -853,7 +853,6 @@ class TLC59711:
             # elif pixel_index_offset == 2:
             #    channel_index -= 2
             # set value in buffer
-            print('value= ', value)
             buffer_start = self._buffer_index_lookuptable[channel_index]
             struct.pack_into(">H", self._buffer, buffer_start, value)
         else:
