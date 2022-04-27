@@ -1,3 +1,39 @@
+About this modification
+=======================
+
+Modified CircuitPython module for the TLC59711 16-bit 12 channel LED PWM driver.
+
+This modification is mainly around the indexing of LEDs and channels.
+The `TLC59711 CircuitPython module <https://github.com/adafruit/Adafruit_CircuitPython_TLC59711>`_ has functions such as
+``set_pixel(pixel_index, value)`` and ``set_channel(channel_index, value)``.
+However, ``set_pixel(0, value)`` turns on LED3, not LED0.
+Likely, ``set_channel(0, value)`` turns on the pin marked as B3 (blue for LED3), not R0 (red for LED0).
+
+It's not a bug of CircuitPython. It's all attributed to the hard-coded programming of TLC59711 itself (Cf. Figure 24 of `TLC59711 Datasheet <https://cdn-shop.adafruit.com/datasheets/tlc59711.pdf>`_).
+This modification changes the behavior of ``pixel_index`` and ``channel_index`` so that indexing works in the natural order as expected and printed on the breakout board.
+It also changes the buffer channel order, where the default is (blue, green, red) to (red, hreen, blue).
+(**To do:** we also need to swap the blightness control (BC) register order.)
+
+``natural_order()`` switches between the natural order mode and the default behavior.
+
+
+It also has 'inverse' mode of PWM output equivalent to ``value_inv = 65535 - value``. See ``invert_output()`` in adafruit_tlc59711.py.
+
+All files except adafruit_tlc59711.py (the module) and README.rst (this file) were not modified.
+
+Installing this modification
+===========================
+
+To install for current user:
+
+.. code-block:: shell
+
+    pip3 install git+https://github.com/kchinzei/Natural-Ordered_Adafruit_CircuitPython_TLC59711.git
+
+**Warning:** doing this will overwrite existing adafruit-circuitpython-tlc59711.
+
+
+*No modification in this file hereafter.*
 
 Introduction
 ============
@@ -14,17 +50,7 @@ Introduction
     :target: https://github.com/adafruit/Adafruit_CircuitPython_TLC59711/actions/
     :alt: Build Status
 
-Modified CircuitPython module for the TLC59711 16-bit 12 channel LED PWM driver.
-
-This modification is mainly around the indexing of LEDs and channels. The `TLC59711 CircuitPython module <https://github.com/adafruit/Adafruit_CircuitPython_TLC59711>`_ has functions such as
-``set_pixel(pixel_index, value)`` and ``set_channel(channel_index, value)``. They just work.
-However, ``set_pixel(0, value)`` turns on LED3, not LED0.
-Likely, ``set_channel(0, value)`` turns on the pin marked as B3 (blue for LED3), not R0 (red for LED0).
-
-It's not a bug of CircuitPython. It's all attributed to the programming of TLC59711 itself (Cf. Figure 24 of `TLC59711 Datasheet <https://cdn-shop.adafruit.com/datasheets/tlc59711.pdf>`_).
-This modification changes the behavior of ``pixel_index`` and ``channel_index`` so that indexing works in the natural order as printed on the breakout board.
-
-It also has 'inverse' mode of PWM output equivalent to ``value_inv = 65535 - value``. See ``invert_output()`` in adafruit_tlc59711.py.
+CircuitPython module for the TLC59711 16-bit 12 channel LED PWM driver.
 
 Dependencies
 =============

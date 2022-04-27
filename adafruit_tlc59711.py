@@ -303,10 +303,12 @@ class TLC59711:
         self.dsprpt = True
         self.blank = False
 
+        # Modified for the natural order of channel_index
+        self._natural_order = True
+
         # preparation done → now initialize buffer to default values
         self._init_buffer()
-        self._buffer_index_lookuptable = []
-        self._init_lookuptable()
+        self._init_lookuptable_natural_order()
 
         # Modified for inverted output
         self._inv = False
@@ -444,6 +446,17 @@ class TLC59711:
         )
 
     def _init_lookuptable(self):
+        self._buffer_index_lookuptable = []
+        for channel_index in range(self.channel_count):
+            buffer_index = (_CHIP_BUFFER_BYTE_COUNT // _BUFFER_BYTES_PER_COLOR) * (
+                channel_index // CHANNEL_PER_CHIP
+            ) + channel_index % CHANNEL_PER_CHIP
+            buffer_index *= _BUFFER_BYTES_PER_COLOR
+            buffer_index += _CHIP_BUFFER_HEADER_BYTE_COUNT
+            self._buffer_index_lookuptable.append(buffer_index)
+
+    def _init_lookuptable_natural_order(self):
+        self._buffer_index_lookuptable = []
         for channel_index in range(self.channel_count):
             # Modified for the natural order of channel_index
             buffer_index = (_CHIP_BUFFER_BYTE_COUNT // _BUFFER_BYTES_PER_COLOR) * (
@@ -452,6 +465,14 @@ class TLC59711:
             buffer_index *= _BUFFER_BYTES_PER_COLOR
             buffer_index += _CHIP_BUFFER_HEADER_BYTE_COUNT
             self._buffer_index_lookuptable.append(buffer_index)
+
+    def natural_order(self, n_o):
+        if self._natural_order != n_o:
+            self._natural_order = n_o
+            if n_o:
+                self._init_lookuptable_natural_order()
+            else:
+                self._init_lookuptable()
 
     ##########################################
 
@@ -659,6 +680,13 @@ class TLC59711:
             value_g = 65535 - value_g
             value_b = 65535 - value_b
 
+        if self._natural_order:
+            offset_r = 0
+            offset_b = 2
+        else:
+            offset_r = 2
+            offset_b = 0
+           
         # optimized for speed.
         # the struct version leads to very slow runtime behaivor if you set
         # lots of pixels. that is the reason the discreet version is used.
@@ -666,7 +694,7 @@ class TLC59711:
         # most prominent this is visible at the set_pixel_all_16bit_value func:
         #  struct 157ms to 16ms (@144pixel on ItsyBitsy M4)
         pixel_start = pixel_index * COLORS_PER_PIXEL
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 2]
+        buffer_start = self._buffer_index_lookuptable[pixel_start + offset_b]
         # struct.pack_into('>H', self._buffer, buffer_start, value_b)
         self._buffer[buffer_start + 0] = (value_b >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_b & 0xFF
@@ -674,7 +702,7 @@ class TLC59711:
         # struct.pack_into('>H', self._buffer, buffer_start, value_g)
         self._buffer[buffer_start + 0] = (value_g >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_g & 0xFF
-        buffer_start = self._buffer_index_lookuptable[pixel_start + 0]
+        buffer_start = self._buffer_index_lookuptable[pixel_start + offset_r]
         # struct.pack_into('>H', self._buffer, buffer_start, value_r)
         self._buffer[buffer_start + 0] = (value_r >> 8) & 0xFF
         self._buffer[buffer_start + 1] = value_r & 0xFF
@@ -846,12 +874,13 @@ class TLC59711:
             # temp = channel_index
             # we change channel order here:
             # buffer channel order is blue, green, red
-            pixel_index_offset = channel_index % COLORS_PER_PIXEL
             # Modified for the natural order of channel_index
-            # if pixel_index_offset == 0:
-            #    channel_index += 2
-            # elif pixel_index_offset == 2:
-            #    channel_index -= 2
+            if not self._natural_order:
+                pixel_index_offset = channel_index % COLORS_PER_PIXEL
+                if pixel_index_offset == 0:
+                    channel_index += 2
+                elif pixel_index_offset == 2:
+                    channel_index -= 2
             # set value in buffer
             buffer_start = self._buffer_index_lookuptable[channel_index]
             struct.pack_into(">H", self._buffer, buffer_start, value)
